@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4CAF50" />
+      <stop offset="100%" stop-color="#2E7D32" />
+    </linearGradient>
+  </defs>
+  <circle cx="250" cy="250" r="200" fill="url(#gradient)" />
+  <text x="250" y="280" font-family="Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="middle" fill="white">Tahsinku</text>
+  <path d="M150,180 Q250,120 350,180" stroke="white" stroke-width="8" fill="none" />
+  <path d="M150,320 Q250,380 350,320" stroke="white" stroke-width="8" fill="none" />
+</svg>

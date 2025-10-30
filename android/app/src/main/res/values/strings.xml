@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tahsinku</string>
+    <string name="title_activity_main">Tahsinku</string>
+    <string name="package_name">com.tahsinku.app</string>
+    <string name="custom_url_scheme">com.tahsinku.app</string>
+</resources>
