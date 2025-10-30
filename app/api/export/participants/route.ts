@@ -37,10 +37,12 @@ export async function POST(request: Request) {
     const exportData = participants.map((p) => ({
       id: p.id,
       name: p.name,
+      email: p.email || '',
+      phone: p.whatsapp || '',
       address: p.address || '',
-      whatsapp: p.whatsapp || '',
-      gender: p.gender || '',
-      job: p.job || '',
+      birth_date: p.birth_date || '',
+      registration_date: p.created_at || new Date().toISOString(),
+      status: p.status || 'active'
     }));
 
     // Export to Google Sheets
