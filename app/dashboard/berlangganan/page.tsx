@@ -111,7 +111,16 @@ export default function BerlanggananPage() {
       return <Badge className="bg-red-600">Menunggu Pembayaran</Badge>
     }
     
-    return <Badge className="bg-yellow-600">Belum Jatuh Tempo</Badge>
+    // Hitung selisih hari antara hari ini dan tanggal jatuh tempo
+    const diffTime = dueDate.getTime() - today.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    // Jika kurang dari atau sama dengan 7 hari menuju jatuh tempo
+    if (diffDays <= 7) {
+      return <Badge className="bg-yellow-600">Jatuh Tempo {diffDays} Hari Lagi</Badge>
+    }
+    
+    return <Badge className="bg-blue-600">Belum Jatuh Tempo</Badge>
   }
 
   const handleUpdateStatus = (id: string, status: 'lunas' | 'menunggu_pembayaran') => {

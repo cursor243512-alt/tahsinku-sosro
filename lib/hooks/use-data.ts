@@ -141,12 +141,42 @@ export function useUpdateEnrollmentStatus() {
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'lunas' | 'menunggu_pembayaran' }) => {
-      const { error } = await supabase
-        .from('enrollments')
-        .update({ status })
-        .eq('id', id)
-
-      if (error) throw error
+      // Jika status lunas, perbarui tanggal
+      if (status === 'lunas') {
+        // Ambil data enrollment terlebih dahulu
+        const { data: enrollment, error: fetchError } = await supabase
+          .from('enrollments')
+          .select('*')
+          .eq('id', id)
+          .single()
+        
+        if (fetchError) throw fetchError
+        
+        // Hitung tanggal jatuh tempo baru (28 hari dari sekarang)
+        const today = new Date()
+        const newDueDate = new Date(today)
+        newDueDate.setDate(today.getDate() + 28)
+        
+        // Update status dan tanggal
+        const { error } = await supabase
+          .from('enrollments')
+          .update({ 
+            status,
+            start_date: today.toISOString().split('T')[0], // Tanggal hari ini sebagai tanggal mulai baru
+            due_date: newDueDate.toISOString().split('T')[0] // Tanggal jatuh tempo baru
+          })
+          .eq('id', id)
+        
+        if (error) throw error
+      } else {
+        // Jika status bukan lunas, hanya update status
+        const { error } = await supabase
+          .from('enrollments')
+          .update({ status })
+          .eq('id', id)
+        
+        if (error) throw error
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['enrollments'] })

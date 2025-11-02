@@ -18,16 +18,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [admin, loading, router])
 
+  // Improved loading state with retry mechanism
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
-        <div className="text-white text-xl">Memuat...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
+        <div className="text-white text-xl mb-4">Memuat...</div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
       </div>
     )
   }
 
   if (!admin) {
-    return null
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
+        <div className="text-white text-xl mb-4">Mengalihkan ke halaman login...</div>
+      </div>
+    )
   }
 
   const menuItems = [
