@@ -27,102 +27,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for existing session
     const checkSession = async () => {
-      try {
-        setLoading(true)
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (session?.user) {
-          // Fetch admin data
-          const { data: adminData, error } = await supabase
-            .from('admins')
-            .select('*')
-            .eq('email', session.user.email)
-            .single()
-          
-          if (adminData && !error) {
-            setAdmin(adminData)
-          } else {
-            console.error('Error fetching admin data:', error)
-            setAdmin(null)
-          }
-        } else {
-          setAdmin(null)
-        }
-      } catch (error) {
-        console.error('Session check error:', error)
-        setAdmin(null)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    checkSession()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (event === 'SIGNED_OUT') {
-          setAdmin(null)
-          setLoading(false)
-          return
-        }
-        
-        if (session?.user) {
-          const { data: adminData, error } = await supabase
-            .from('admins')
-            .select('*')
-            .eq('email', session.user.email)
-            .single()
-          
-          if (adminData && !error) {
-            setAdmin(adminData)
-          } else {
-            console.error('Error fetching admin data on auth change:', error)
-            setAdmin(null)
-          }
-        } else {
-          setAdmin(null)
-        }
-      } catch (error) {
-        console.error('Auth state change error:', error)
-        setAdmin(null)
-      } finally {
-        setLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const signIn = async (email: string, password: string) => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) throw error
+      const { data: { session } } = await supabase.auth.getSession()
       
-      // Refresh admin data after login
-      if (data.user) {
+      if (session?.user) {
+        // Fetch admin data
         const { data: adminData } = await supabase
           .from('admins')
           .select('*')
-          .eq('email', data.user.email)
+          .eq('email', session.user.email)
           .single()
         
         if (adminData) {
           setAdmin(adminData)
         }
       }
-
-      router.push('/dashboard')
-    } catch (error) {
-      throw error
-    } finally {
+      
       setLoading(false)
     }
+
+    checkSession()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const { data: adminData } = await supabase
+          .from('admins')
+          .select('*')
+          .eq('email', session.user.email)
+          .single()
+        
+        if (adminData) {
+          setAdmin(adminData)
+        }
+      } else {
+        setAdmin(null)
+      }
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) throw error
+
+    router.push('/dashboard')
   }
 
   const signOut = async () => {

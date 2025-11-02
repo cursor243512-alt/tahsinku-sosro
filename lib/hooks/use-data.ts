@@ -141,35 +141,33 @@ export function useUpdateEnrollmentStatus() {
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'lunas' | 'menunggu_pembayaran' }) => {
-      // Jika status lunas, perbarui tanggal
+      // Jika status lunas, kita perlu memperbarui tanggal jatuh tempo
       if (status === 'lunas') {
-        // Ambil data enrollment terlebih dahulu
-        const { data: enrollment, error: fetchError } = await supabase
+        // Ambil data enrollment saat ini
+        const { data: currentEnrollment, error: fetchError } = await supabase
           .from('enrollments')
-          .select('*')
+          .select('start_date')
           .eq('id', id)
           .single()
         
         if (fetchError) throw fetchError
         
-        // Hitung tanggal jatuh tempo baru (28 hari dari sekarang)
-        const today = new Date()
-        const newDueDate = new Date(today)
-        newDueDate.setDate(today.getDate() + 28)
+        // Hitung tanggal jatuh tempo baru (30 hari dari sekarang)
+        const newDueDate = new Date()
+        newDueDate.setDate(newDueDate.getDate() + 30)
         
-        // Update status dan tanggal
+        // Update status dan tanggal jatuh tempo
         const { error } = await supabase
           .from('enrollments')
           .update({ 
             status,
-            start_date: today.toISOString().split('T')[0], // Tanggal hari ini sebagai tanggal mulai baru
-            due_date: newDueDate.toISOString().split('T')[0] // Tanggal jatuh tempo baru
+            due_date: newDueDate.toISOString().split('T')[0] // Format YYYY-MM-DD
           })
           .eq('id', id)
         
         if (error) throw error
       } else {
-        // Jika status bukan lunas, hanya update status
+        // Jika bukan lunas, hanya update status
         const { error } = await supabase
           .from('enrollments')
           .update({ status })

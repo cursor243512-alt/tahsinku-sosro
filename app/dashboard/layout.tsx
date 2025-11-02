@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Users, UserCheck, GraduationCap, Calendar, LogOut, UserPlus } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { admin, loading, signOut } = useAuth()
@@ -18,22 +19,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [admin, loading, router])
 
-  // Improved loading state with retry mechanism
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
-        <div className="text-white text-xl mb-4">Memuat...</div>
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
+        <div className="text-white text-xl">Memuat...</div>
       </div>
     )
   }
 
   if (!admin) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
-        <div className="text-white text-xl mb-4">Mengalihkan ke halaman login...</div>
-      </div>
-    )
+    return null
   }
 
   const menuItems = [
@@ -49,7 +44,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Header */}
       <header className="bg-slate-900/50 backdrop-blur-sm border-b border-white/10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">TahsinKu Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <div className="relative w-10 h-10 overflow-hidden rounded-full">
+              <Image 
+                src="/sosro.jpeg" 
+                alt="TahsinKu Logo" 
+                width={40} 
+                height={40} 
+                className="object-cover"
+                priority
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-white">TahsinKu Dashboard</h1>
+          </div>
           <Button 
             variant="ghost" 
             size="sm" 

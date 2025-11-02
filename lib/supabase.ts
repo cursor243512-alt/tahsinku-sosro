@@ -7,15 +7,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Client-side supabase instance with improved caching and persistence
-export const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    storageKey: 'tahsinku-auth-storage'
-  }
-})
+// Client-side supabase instance (for use client components)
+export const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey)
 
 // Database Types
 export type Database = {

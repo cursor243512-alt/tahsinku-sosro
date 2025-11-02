@@ -111,16 +111,19 @@ export default function BerlanggananPage() {
       return <Badge className="bg-red-600">Menunggu Pembayaran</Badge>
     }
     
-    // Hitung selisih hari antara hari ini dan tanggal jatuh tempo
-    const diffTime = dueDate.getTime() - today.getTime()
+    return <Badge className="bg-yellow-600">Belum Jatuh Tempo</Badge>
+  }
+  
+  const isNearDueDate = (dueDate: string) => {
+    if (!dueDate) return false
+    
+    const today = new Date()
+    const dueDateObj = new Date(dueDate)
+    const diffTime = dueDateObj.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     
-    // Jika kurang dari atau sama dengan 7 hari menuju jatuh tempo
-    if (diffDays <= 7) {
-      return <Badge className="bg-yellow-600">Jatuh Tempo {diffDays} Hari Lagi</Badge>
-    }
-    
-    return <Badge className="bg-blue-600">Belum Jatuh Tempo</Badge>
+    // Return true if due date is within 7 days
+    return diffDays >= 0 && diffDays <= 7
   }
 
   const handleUpdateStatus = (id: string, status: 'lunas' | 'menunggu_pembayaran') => {
@@ -208,10 +211,10 @@ export default function BerlanggananPage() {
                   <TableCell className="text-gray-300">{enrollment.teacher_name}</TableCell>
                   <TableCell className="text-gray-300 capitalize">{enrollment.class_type}</TableCell>
                   <TableCell className="text-gray-300">
-                    {format(new Date(enrollment.start_date), 'd MMMM yyyy', { locale: idLocale })}
+                    {enrollment.start_date ? format(new Date(enrollment.start_date), 'd MMMM yyyy', { locale: idLocale }) : '-'}
                   </TableCell>
                   <TableCell className="text-gray-300">
-                    {format(new Date(enrollment.due_date), 'd MMMM yyyy', { locale: idLocale })}
+                    {enrollment.due_date ? format(new Date(enrollment.due_date), 'd MMMM yyyy', { locale: idLocale }) : '-'}
                   </TableCell>
                   <TableCell>{getStatusBadge(enrollment)}</TableCell>
                   <TableCell>
@@ -223,6 +226,16 @@ export default function BerlanggananPage() {
                         disabled={updateStatusMutation.isPending}
                       >
                         {updateStatusMutation.isPending ? 'Menyimpan...' : 'Tandai Lunas'}
+                      </Button>
+                    )}
+                    {enrollment.status === 'lunas' && isNearDueDate(enrollment.due_date) && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleUpdateStatus(enrollment.id, 'menunggu_pembayaran')}
+                        className="bg-yellow-600 hover:bg-yellow-700"
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        {updateStatusMutation.isPending ? 'Menyimpan...' : 'Belum Jatuh Tempo'}
                       </Button>
                     )}
                   </TableCell>
