@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TahsinKu Dashboard - Platform Manajemen Tahsin",
   description: "Platform manajemen untuk kelas tahsin",
+  icons: {
+    icon: "/sosro.png",
+    shortcut: "/sosro.png",
+    apple: "/sosro.png",
+  },
 };
 
 export default function RootLayout({

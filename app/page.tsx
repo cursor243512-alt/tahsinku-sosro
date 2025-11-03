@@ -18,6 +18,15 @@ export default function Home() {
     }
   }, [admin, loading, router])
 
+  // Safety fallback: if loading persists > 5s, force to /login
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => {
+      router.replace('/login')
+    }, 5000)
+    return () => clearTimeout(t)
+  }, [loading, router])
+
   // Show nothing during redirect to avoid flash
   if (!loading) {
     return null

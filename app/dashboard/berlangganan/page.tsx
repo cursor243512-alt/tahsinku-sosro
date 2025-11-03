@@ -8,8 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { loadClient } from '@/lib/dynamic'
 import { Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, parseISO, addDays, differenceInCalendarDays } from 'date-fns'
 import { id as idLocale } from 'date-fns/locale'
+import { useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/lib/auth-context'
 
 const ExportButton = loadClient(() => import('@/components/export-button').then(m => m.ExportButton as any))
 
@@ -34,6 +37,8 @@ export default function BerlanggananPage() {
   const { data: paged, isLoading } = useEnrollmentsPaged(page, pageSize)
   const enrollments = paged?.rows || []
   const updateStatusMutation = useUpdateEnrollmentStatus()
+  const queryClient = useQueryClient()
+  const { admin } = useAuth()
   
   const [searchQuery, setSearchQuery] = useState('')
   // debounce 300ms
@@ -44,6 +49,8 @@ export default function BerlanggananPage() {
   }, [searchQuery])
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingDate, setEditingDate] = useState<string>('')
 
   // Memoized filtered and sorted data
   const filteredEnrollments = useMemo(() => {
@@ -55,7 +62,7 @@ export default function BerlanggananPage() {
       result = result.filter(e => 
         e.participant_name.toLowerCase().includes(query) ||
         e.teacher_name.toLowerCase().includes(query) ||
-        e.class_name.toLowerCase().includes(query)
+        (e.class_name?.toLowerCase() || '').includes(query)
       )
     }
 
@@ -99,19 +106,71 @@ export default function BerlanggananPage() {
     return <ArrowUpDown className="w-4 h-4 ml-1 inline" />
   }
 
-  const getStatusBadge = (enrollment: Enrollment) => {
+  const beginEditDate = (id: string, currentStart?: string) => {
+    setEditingId(id)
+    try {
+      const init = currentStart ? format(parseISO(currentStart), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')
+      setEditingDate(init)
+    } catch {
+      setEditingDate(format(new Date(), 'yyyy-MM-dd'))
+    }
+  }
+
+  const cancelEditDate = () => {
+    setEditingId(null)
+    setEditingDate('')
+  }
+
+  const saveEditDate = async (id: string) => {
+    if (!editingDate) {
+      alert('Tanggal tidak boleh kosong')
+      return
+    }
+    const base = parseISO(editingDate)
+    if (isNaN(base.getTime())) {
+      alert('Format tanggal tidak valid. Gunakan YYYY-MM-DD')
+      return
+    }
+    const due = addDays(base, 28)
+    const updates: any = {
+      start_date: format(base, 'yyyy-MM-dd'),
+      due_date: format(due, 'yyyy-MM-dd'),
+      // Selalu bukan 'lunas' setelah set tanggal; admin akan menandai lunas secara manual
+      status: 'menunggu_pembayaran',
+    }
+
+    const { error } = await supabase
+      .from('enrollments')
+      .update(updates)
+      .eq('id', id)
+
+    if (error) {
+      alert('Gagal memperbarui tanggal: ' + error.message)
+      return
+    }
+    queryClient.invalidateQueries({
+      predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as any[])[0] === 'enrollments',
+    })
+    cancelEditDate()
+    alert('Tanggal berhasil diatur untuk baris ini')
+  }
+
+  const getComputedStatus = (enrollment: Enrollment) => {
+    if (!enrollment.due_date) return enrollment.status === 'lunas' ? 'sedang_berlangsung' as const : 'menunggu_pembayaran' as const
     const today = new Date()
-    const dueDate = new Date(enrollment.due_date)
-    
-    if (enrollment.status === 'lunas') {
-      return <Badge className="bg-green-600">Lunas</Badge>
-    }
-    
-    if (today > dueDate) {
-      return <Badge className="bg-red-600">Menunggu Pembayaran</Badge>
-    }
-    
-    return <Badge className="bg-yellow-600">Belum Jatuh Tempo</Badge>
+    const due = parseISO(enrollment.due_date)
+    const daysLeft = differenceInCalendarDays(due, today)
+    if (daysLeft < 0) return 'menunggu_pembayaran' as const
+    if (daysLeft <= 7) return 'belum_jatuh_tempo' as const
+    return enrollment.status === 'lunas' ? 'sedang_berlangsung' as const : 'menunggu_pembayaran' as const
+  }
+
+  const getStatusBadge = (enrollment: Enrollment) => {
+    const status = getComputedStatus(enrollment)
+    if (status === 'menunggu_pembayaran') return <Badge className="bg-red-600">Menunggu Pembayaran</Badge>
+    if (status === 'belum_jatuh_tempo') return <Badge className="bg-yellow-600">Belum Jatuh Tempo</Badge>
+    if (status === 'sedang_berlangsung') return <Badge className="bg-blue-600">Sedang Berlangsung</Badge>
+    return null
   }
   
   const isNearDueDate = (dueDate: string) => {
@@ -122,18 +181,81 @@ export default function BerlanggananPage() {
     const diffTime = dueDateObj.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     
-    // Return true if due date is within 7 days
     return diffDays >= 0 && diffDays <= 7
   }
 
-  const handleUpdateStatus = (id: string, status: 'lunas' | 'menunggu_pembayaran') => {
+  const handleBulkSetStartDate = async () => {
+    const input = typeof window !== 'undefined' ? window.prompt('Masukkan Tanggal Daftar (format YYYY-MM-DD)', '2025-10-26') : null
+    if (!input) return
+    const base = new Date(input)
+    if (isNaN(base.getTime())) {
+      alert('Format tanggal tidak valid. Gunakan YYYY-MM-DD (misal 2025-10-26)')
+      return
+    }
+    const due = addDays(base, 28)
+    const today = new Date()
+    const statusForAll: 'lunas' | 'menunggu_pembayaran' = differenceInCalendarDays(due, today) < 0 ? 'menunggu_pembayaran' : 'lunas'
+    const { data, error } = await supabase
+      .from('enrollments')
+      .update({
+        start_date: format(base, 'yyyy-MM-dd'),
+        due_date: format(due, 'yyyy-MM-dd'),
+        status: statusForAll,
+      })
+      // PostgREST melarang update tanpa filter; gunakan filter aman untuk menjangkau semua baris
+      .not('id', 'is', null)
+      .select('id')
+
+    if (error) {
+      console.error('Bulk set date failed:', error)
+      alert('Gagal memperbarui tanggal: ' + error.message)
+      return
+    }
+
+    queryClient.invalidateQueries({
+      predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as any[])[0] === 'enrollments',
+    })
+    alert(`Tanggal diperbarui untuk ${data?.length ?? 0} baris. Semua Tanggal Daftar diset ke 26 Oktober 2025 dan Jatuh Tempo otomatis dibuat`)
+  }
+
+  const handleSyncStatus = async () => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+    // Set overdue (non-lunas) to menunggu_pembayaran
+    const { error: errOverdue } = await supabase
+      .from('enrollments')
+      .update({ status: 'menunggu_pembayaran' })
+      .lt('due_date', todayStr)
+      .neq('status', 'lunas')
+    if (errOverdue) {
+      alert('Gagal menyinkronkan status (overdue): ' + errOverdue.message)
+      return
+    }
+    // Jangan mengubah baris lain (termasuk yang masih belum jatuh tempo); Lunas tetap harus manual
+
+    queryClient.invalidateQueries({
+      predicate: (q) => Array.isArray(q.queryKey) && (q.queryKey as any[])[0] === 'enrollments',
+    })
+    alert('Status berhasil disinkronkan berdasarkan tanggal jatuh tempo')
+  }
+
+  const handleUpdateStatus = async (id: string, status: 'lunas' | 'menunggu_pembayaran') => {
+    if (status === 'lunas') {
+      if (!admin) {
+        alert('Tidak ada admin aktif')
+        return
+      }
+      const ok = typeof window !== 'undefined' ? window.confirm('Konfirmasi: Proses Bayar (perpanjang) untuk peserta ini?') : false
+      if (!ok) return
+    }
+
     updateStatusMutation.mutate({ id, status }, {
       onSuccess: () => {
         alert('Status berhasil diupdate!')
       },
       onError: (error) => {
-        console.error('Error updating status:', error)
-        alert('Gagal mengubah status')
+        const msg = (error as any)?.message || (typeof error === 'string' ? error : JSON.stringify(error))
+        console.error('Error updating status:', msg)
+        alert('Gagal mengubah status: ' + msg)
       },
     })
   }
@@ -146,10 +268,13 @@ export default function BerlanggananPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Manajemen Berlangganan</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Manajemen Berlangganan</h2>
           <p className="text-gray-300">Cari Peserta</p>
         </div>
-        <ExportButton type="payments" label="Export ke Sheets" />
+        <div className="flex gap-2">
+          <Button onClick={handleSyncStatus} className="bg-amber-600 hover:bg-amber-700">Sinkronkan Status</Button>
+          <ExportButton type="payments" label="Export ke Sheets" />
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -164,7 +289,7 @@ export default function BerlanggananPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-x-auto">
+      <div className="hidden md:block bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-x-auto">
         <Table className="min-w-[800px]">
           <TableHeader>
             <TableRow className="border-white/20 hover:bg-white/5">
@@ -194,7 +319,7 @@ export default function BerlanggananPage() {
                 </button>
               </TableHead>
               <TableHead className="text-gray-300 font-semibold">Status</TableHead>
-              <TableHead className="text-gray-300 font-semibold">Aksi</TableHead>
+              <TableHead className="text-gray-300 font-semibold sticky right-0 bg-white/10 backdrop-blur-sm">Aksi</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -211,39 +336,133 @@ export default function BerlanggananPage() {
                   <TableCell className="text-gray-300">{enrollment.teacher_name}</TableCell>
                   <TableCell className="text-gray-300 capitalize">{enrollment.class_type}</TableCell>
                   <TableCell className="text-gray-300">
-                    {enrollment.start_date ? format(new Date(enrollment.start_date), 'd MMMM yyyy', { locale: idLocale }) : '-'}
+                    {enrollment.start_date ? format(parseISO(enrollment.start_date), 'd MMMM yyyy', { locale: idLocale }) : '-'}
                   </TableCell>
                   <TableCell className="text-gray-300">
-                    {enrollment.due_date ? format(new Date(enrollment.due_date), 'd MMMM yyyy', { locale: idLocale }) : '-'}
+                    {enrollment.due_date ? format(parseISO(enrollment.due_date), 'd MMMM yyyy', { locale: idLocale }) : '-'}
                   </TableCell>
                   <TableCell>{getStatusBadge(enrollment)}</TableCell>
-                  <TableCell>
-                    {enrollment.status === 'menunggu_pembayaran' && (
+                  <TableCell className="sticky right-0 bg-white/10 backdrop-blur-sm space-x-2">
+                    {editingId === enrollment.id ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={editingDate}
+                          onChange={(e) => setEditingDate(e.target.value)}
+                          className="bg-white text-black rounded px-2 py-1"
+                        />
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => saveEditDate(enrollment.id)}>
+                          Simpan
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={cancelEditDate}>
+                          Batal
+                        </Button>
+                      </div>
+                    ) : (
                       <Button
                         size="sm"
-                        onClick={() => handleUpdateStatus(enrollment.id, 'lunas')}
-                        className="bg-green-600 hover:bg-green-700"
+                        variant="outline"
+                        onClick={() => beginEditDate(enrollment.id, enrollment.start_date)}
                         disabled={updateStatusMutation.isPending}
                       >
-                        {updateStatusMutation.isPending ? 'Menyimpan...' : 'Tandai Lunas'}
+                        Set Tanggal
                       </Button>
                     )}
-                    {enrollment.status === 'lunas' && isNearDueDate(enrollment.due_date) && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleUpdateStatus(enrollment.id, 'menunggu_pembayaran')}
-                        className="bg-yellow-600 hover:bg-yellow-700"
-                        disabled={updateStatusMutation.isPending}
-                      >
-                        {updateStatusMutation.isPending ? 'Menyimpan...' : 'Belum Jatuh Tempo'}
-                      </Button>
-                    )}
+                    {(() => {
+                      const cs = getComputedStatus(enrollment)
+                      if (cs === 'sedang_berlangsung') {
+                        return (
+                          <Button size="sm" disabled className="bg-green-600 opacity-70 cursor-not-allowed">Lunas</Button>
+                        )
+                      }
+                      if (cs === 'belum_jatuh_tempo' || cs === 'menunggu_pembayaran') {
+                        return (
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpdateStatus(enrollment.id, 'lunas')}
+                            className="bg-purple-600 hover:bg-purple-700"
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            {updateStatusMutation.isPending ? 'Memproses...' : 'Bayar'}
+                          </Button>
+                        )
+                      }
+                      return null
+                    })()}
                   </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
+      </div>
+      <div className="md:hidden space-y-3">
+        {filteredEnrollments.length === 0 ? (
+          <div className="text-center text-gray-400 py-6">{searchQuery ? 'Tidak ada data yang cocok dengan pencarian' : 'Belum ada data berlangganan'}</div>
+        ) : (
+          filteredEnrollments.map((enrollment) => (
+            <div key={enrollment.id} className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-white font-semibold">{enrollment.participant_name}</div>
+                <div>{getStatusBadge(enrollment)}</div>
+              </div>
+              <div className="text-gray-300 text-sm mt-2">
+                <div className="flex justify-between"><span>Pengajar</span><span className="ml-2">{enrollment.teacher_name}</span></div>
+                <div className="flex justify-between"><span>Kelas</span><span className="ml-2 capitalize">{enrollment.class_type}</span></div>
+                <div className="flex justify-between"><span>Tgl Daftar</span><span className="ml-2">{enrollment.start_date ? format(parseISO(enrollment.start_date), 'd MMM yy', { locale: idLocale }) : '-'}</span></div>
+                <div className="flex justify-between"><span>Jatuh Tempo</span><span className="ml-2">{enrollment.due_date ? format(parseISO(enrollment.due_date), 'd MMM yy', { locale: idLocale }) : '-'}</span></div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {editingId === enrollment.id ? (
+                  <>
+                    <input
+                      type="date"
+                      value={editingDate}
+                      onChange={(e) => setEditingDate(e.target.value)}
+                      className="bg-white text-black rounded px-2 py-1 flex-1 min-w-[140px]"
+                    />
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => saveEditDate(enrollment.id)}>
+                      Simpan
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={cancelEditDate}>
+                      Batal
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => beginEditDate(enrollment.id, enrollment.start_date)}
+                    disabled={updateStatusMutation.isPending}
+                  >
+                    Set Tanggal
+                  </Button>
+                )}
+                {(() => {
+                  const cs = getComputedStatus(enrollment)
+                  if (cs === 'sedang_berlangsung') {
+                    return (
+                      <Button size="sm" disabled className="bg-green-600 opacity-70 cursor-not-allowed">Lunas</Button>
+                    )
+                  }
+                  if (cs === 'belum_jatuh_tempo' || cs === 'menunggu_pembayaran') {
+                    return (
+                      <Button
+                        size="sm"
+                        onClick={() => handleUpdateStatus(enrollment.id, 'lunas')}
+                        className="bg-purple-600 hover:bg-purple-700"
+                        disabled={updateStatusMutation.isPending}
+                      >
+                        {updateStatusMutation.isPending ? 'Memproses...' : 'Bayar'}
+                      </Button>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}

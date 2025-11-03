@@ -19,17 +19,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [admin, loading, router])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
-        <div className="text-white text-xl">Memuat...</div>
-      </div>
-    )
-  }
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => {
+      router.push('/login')
+    }, 6000)
+    return () => clearTimeout(t)
+  }, [loading, router])
 
-  if (!admin) {
-    return null
-  }
+  // Jangan blokir seluruh halaman saat loading; tampilkan overlay saja
+  // Agar refresh tidak pernah "stuck" bila auth lambat/error.
 
   const menuItems = [
     { href: '/dashboard/berlangganan', icon: Users, label: 'Berlangganan' },
@@ -47,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-3">
             <div className="relative w-10 h-10 overflow-hidden rounded-full">
               <Image 
-                src="/sosro.jpeg" 
+                src="/sosro.png" 
                 alt="TahsinKu Logo" 
                 width={40} 
                 height={40} 

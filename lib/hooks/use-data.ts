@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../supabase'
 import { autoExport } from '../auto-export'
+import { format as formatDate } from 'date-fns'
 
 // ==================== ENROLLMENTS (Berlangganan) ====================
 export function useEnrollments() {
@@ -17,7 +18,7 @@ export function useEnrollments() {
         `)
         .order('start_date', { ascending: false })
 
-      if (error) throw error
+      if (error) throw new Error(error.message)
 
       return data?.map(e => ({
         id: e.id,
@@ -69,7 +70,7 @@ export function useParticipantsPaged(page: number, pageSize: number, search: str
         .from('participants')
         .select('id', { count: 'exact', head: true })
 
-      if (countError) throw countError
+      if (countError) throw new Error(countError.message)
 
       return {
         rows: data || [],
@@ -140,44 +141,127 @@ export function useUpdateEnrollmentStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
+    onMutate: async ({ id, status }: { id: string; status: 'lunas' | 'menunggu_pembayaran' }) => {
+      // Optimistic update for all enrollment-related caches
+      await queryClient.cancelQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'enrollments',
+      })
+
+      const snapshots = queryClient.getQueriesData<any>({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'enrollments',
+      })
+
+      const rollbackPayload: Array<[any, any]> = []
+
+      for (const [key, data] of snapshots) {
+        rollbackPayload.push([key, data])
+
+        // Shape 1: paged { rows, total }
+        if (data && Array.isArray(data.rows)) {
+          const next = {
+            ...data,
+            rows: data.rows.map((e: any) => {
+              if (e.id !== id) return e
+              if (status === 'lunas') {
+                const baseStartStr = e.due_date || e.start_date || formatDate(new Date(), 'yyyy-MM-dd')
+                const baseStart = new Date(baseStartStr)
+                const newDue = new Date(baseStart)
+                newDue.setDate(newDue.getDate() + 28)
+                return {
+                  ...e,
+                  status: 'lunas',
+                  start_date: formatDate(baseStart, 'yyyy-MM-dd'),
+                  due_date: formatDate(newDue, 'yyyy-MM-dd'),
+                }
+              }
+              return { ...e, status }
+            }),
+          }
+          queryClient.setQueryData(key, next)
+          continue
+        }
+
+        // Shape 2: simple array of enrollments
+        if (Array.isArray(data)) {
+          const next = data.map((e: any) => {
+            if (e.id !== id) return e
+            if (status === 'lunas') {
+              const baseStartStr = e.due_date || e.start_date || formatDate(new Date(), 'yyyy-MM-dd')
+              const baseStart = new Date(baseStartStr)
+              const newDue = new Date(baseStart)
+              newDue.setDate(newDue.getDate() + 28)
+              return {
+                ...e,
+                status: 'lunas',
+                start_date: formatDate(baseStart, 'yyyy-MM-dd'),
+                due_date: formatDate(newDue, 'yyyy-MM-dd'),
+              }
+            }
+            return { ...e, status }
+          })
+          queryClient.setQueryData(key, next)
+        }
+      }
+
+      return { rollbackPayload }
+    },
     mutationFn: async ({ id, status }: { id: string; status: 'lunas' | 'menunggu_pembayaran' }) => {
-      // Jika status lunas, kita perlu memperbarui tanggal jatuh tempo
+      // Jika status lunas, pindahkan siklus: start_date = due_date saat ini, due_date = start_date + 28 hari
       if (status === 'lunas') {
-        // Ambil data enrollment saat ini
+        // Ambil data enrollment saat ini (butuh due_date & start_date sebagai fallback)
         const { data: currentEnrollment, error: fetchError } = await supabase
           .from('enrollments')
-          .select('start_date')
+          .select('start_date, due_date')
           .eq('id', id)
           .single()
         
-        if (fetchError) throw fetchError
+        if (fetchError) throw new Error(fetchError.message)
         
-        // Hitung tanggal jatuh tempo baru (30 hari dari sekarang)
-        const newDueDate = new Date()
-        newDueDate.setDate(newDueDate.getDate() + 30)
+        // Tentukan start_date baru: gunakan due_date terkini jika ada, jika tidak gunakan start_date, jika tetap kosong gunakan hari ini
+        const baseStart = currentEnrollment?.due_date || currentEnrollment?.start_date || new Date().toISOString().split('T')[0]
+        const newStartDate = new Date(baseStart)
+        const newDueDate = new Date(newStartDate)
+        newDueDate.setDate(newDueDate.getDate() + 28)
         
-        // Update status dan tanggal jatuh tempo
+        // Update status, start_date baru, dan due_date baru (format lokal yyyy-MM-dd tanpa timezone drift)
         const { error } = await supabase
           .from('enrollments')
           .update({ 
             status,
-            due_date: newDueDate.toISOString().split('T')[0] // Format YYYY-MM-DD
+            start_date: formatDate(newStartDate, 'yyyy-MM-dd'),
+            due_date: formatDate(newDueDate, 'yyyy-MM-dd')
           })
           .eq('id', id)
+          .select('id')
+          .single()
         
-        if (error) throw error
+        if (error) throw new Error(error.message)
       } else {
         // Jika bukan lunas, hanya update status
         const { error } = await supabase
           .from('enrollments')
           .update({ status })
           .eq('id', id)
+          .select('id')
+          .single()
         
-        if (error) throw error
+        if (error) throw new Error(error.message)
+      }
+    },
+    onError: (_err, _vars, ctx) => {
+      // Rollback optimistic updates
+      const payload = ctx as { rollbackPayload?: Array<[any, any]> }
+      if (payload?.rollbackPayload) {
+        for (const [key, data] of payload.rollbackPayload) {
+          queryClient.setQueryData(key, data)
+        }
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['enrollments'] })
+      // Invalidate all enrollment-related queries (including paged variants)
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'enrollments',
+      })
       // Auto-export to Sheets in background
       autoExport('payments', true)
     },

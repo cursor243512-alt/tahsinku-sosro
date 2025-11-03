@@ -25,58 +25,100 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
 
   useEffect(() => {
-    // Check for existing session
+    let mounted = true
+    console.debug('[auth] provider mounted')
+
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (session?.user) {
-        // Fetch admin data
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('email', session.user.email)
-          .single()
-        
-        if (adminData) {
-          setAdmin(adminData)
+      try {
+        console.debug('[auth] checkSession start')
+        const timeout = new Promise<any>((resolve) => setTimeout(() => resolve({ data: { session: null } }), 4000))
+        const res: any = await Promise.race([supabase.auth.getSession(), timeout])
+        const session = res?.data?.session || null
+        console.debug('[auth] checkSession session?', !!session)
+
+        if (session?.user) {
+          try {
+            const adminRes: any = await Promise.race([
+              supabase.from('admins').select('*').eq('email', session.user.email).single(),
+              new Promise((resolve) => setTimeout(() => resolve({ data: null }), 4000)),
+            ])
+            if (mounted && adminRes?.data) {
+              setAdmin(adminRes.data)
+              console.debug('[auth] admin loaded from DB')
+            }
+          } catch (_) {}
+        }
+      } catch (_) {
+      } finally {
+        if (mounted) {
+          setLoading(false)
+          console.debug('[auth] checkSession setLoading(false)')
         }
       }
-      
-      setLoading(false)
     }
 
     checkSession()
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('email', session.user.email)
-          .single()
-        
-        if (adminData) {
-          setAdmin(adminData)
+      console.debug('[auth] onAuthStateChange', event, !!session)
+      try {
+        if (session?.user) {
+          const { data: adminData } = await supabase
+            .from('admins')
+            .select('*')
+            .eq('email', session.user.email)
+            .single()
+          if (mounted && adminData) {
+            setAdmin(adminData)
+            console.debug('[auth] admin updated from onAuthStateChange')
+          }
+        } else {
+          if (mounted) setAdmin(null)
         }
-      } else {
-        setAdmin(null)
+      } catch (_) {
+      } finally {
+        if (mounted) {
+          setLoading(false)
+          console.debug('[auth] onAuthStateChange setLoading(false)')
+        }
       }
-      setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+      console.debug('[auth] provider unmounted')
+    }
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    setLoading(true)
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Login timeout. Periksa koneksi internet Anda.')), 20000)
+      )
+      const res = (await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        timeout,
+      ])) as { error?: any }
 
-    if (error) throw error
+      if (res?.error) {
+        throw new Error(res.error.message || 'Login gagal')
+      }
 
-    router.push('/dashboard')
+      try {
+        const { data: adminData } = await supabase
+          .from('admins')
+          .select('*')
+          .eq('email', email)
+          .single()
+        if (adminData) setAdmin(adminData)
+      } catch (_) {}
+
+      router.replace('/dashboard')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const signOut = async () => {
