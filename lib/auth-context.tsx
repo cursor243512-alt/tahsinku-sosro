@@ -97,13 +97,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Login timeout. Periksa koneksi internet Anda.')), 20000)
       )
-      const res = (await Promise.race([
-        supabase.auth.signInWithPassword({ email, password }),
-        timeout,
-      ])) as { error?: any }
-
-      if (res?.error) {
-        throw new Error(res.error.message || 'Login gagal')
+      try {
+        const res = (await Promise.race([
+          supabase.auth.signInWithPassword({ email, password }),
+          timeout,
+        ])) as { error?: any }
+        if (res?.error) throw new Error(res.error.message || 'Login gagal')
+      } catch (e) {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+        const ctl = new AbortController()
+        const id = setTimeout(() => ctl.abort(), 20000)
+        const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: key },
+          body: JSON.stringify({ email, password }),
+          mode: 'cors',
+          cache: 'no-store',
+          signal: ctl.signal,
+        })
+        clearTimeout(id)
+        if (!r.ok) {
+          let msg = 'Login gagal'
+          try { const j = await r.json(); msg = j?.error_description || j?.msg || msg } catch {}
+          throw new Error(msg)
+        }
+        const j = await r.json()
+        await supabase.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token })
       }
 
       try {
