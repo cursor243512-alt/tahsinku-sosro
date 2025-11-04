@@ -128,12 +128,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data: adminData } = await supabase
-          .from('admins')
-          .select('*')
-          .eq('email', email)
-          .single()
-        if (adminData) setAdmin(adminData)
+        const adminRes: any = await Promise.race([
+          supabase
+            .from('admins')
+            .select('*')
+            .eq('email', email)
+            .single(),
+          new Promise((resolve) => setTimeout(() => resolve({ data: null }), 4000)),
+        ])
+        if (adminRes?.data) setAdmin(adminRes.data)
       } catch (_) {}
 
       router.replace('/dashboard')
