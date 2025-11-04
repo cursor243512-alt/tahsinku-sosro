@@ -72,16 +72,18 @@ function getSheetsClient() {
   if (sheets) return sheets;
 
   try {
-    // Baca credentials dari ENV JSON terlebih dahulu, fallback ke file path
+    // Baca credentials dari ENV JSON terlebih dahulu. Hanya fallback ke file jika PATH secara eksplisit diset.
     let credentials: any | null = null;
     const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON;
+    const credentialsPathVar = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH;
+
     if (credentialsJson && credentialsJson.trim().length > 0) {
       credentials = JSON.parse(credentialsJson);
+    } else if (credentialsPathVar && credentialsPathVar.trim().length > 0) {
+      const resolvedPath = join(process.cwd(), credentialsPathVar);
+      credentials = JSON.parse(readFileSync(resolvedPath, 'utf-8'));
     } else {
-      const credentialsPath = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH || './google-credentials.json';
-      credentials = JSON.parse(
-        readFileSync(join(process.cwd(), credentialsPath), 'utf-8')
-      );
+      throw new Error('MISSING_SHEETS_ENV');
     }
 
     // Setup auth
@@ -95,10 +97,14 @@ function getSheetsClient() {
     return sheets;
   } catch (error: any) {
     console.error('Error initializing Google Sheets client:', error);
-    
+
     // Better error messages
+    if (error.message === 'MISSING_SHEETS_ENV') {
+      throw new Error('Konfigurasi Google Sheets belum lengkap. Set GOOGLE_SHEETS_CREDENTIALS_JSON (disarankan di Netlify) atau set GOOGLE_SHEETS_CREDENTIALS_PATH dengan path file yang valid.');
+    }
     if (error.code === 'ENOENT') {
-      throw new Error('File google-credentials.json tidak ditemukan. Pastikan file sudah ada di root project.');
+      const p = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH || '(tidak diset)';
+      throw new Error(`File kredensial tidak ditemukan pada path "${p}". Disarankan gunakan GOOGLE_SHEETS_CREDENTIALS_JSON di environment Netlify.`);
     }
     if (error.message?.includes('Unexpected end of JSON input') || error.message?.includes('JSON')) {
       throw new Error('Format GOOGLE_SHEETS_CREDENTIALS_JSON tidak valid. Pastikan ENV berisi JSON service account yang valid.');
@@ -106,7 +112,7 @@ function getSheetsClient() {
     if (!process.env.GOOGLE_SHEETS_CREDENTIALS_JSON && !process.env.GOOGLE_SHEETS_CREDENTIALS_PATH) {
       throw new Error('Konfigurasi Google Sheets belum lengkap. Set salah satu: GOOGLE_SHEETS_CREDENTIALS_JSON atau GOOGLE_SHEETS_CREDENTIALS_PATH');
     }
-    
+
     throw new Error(`Gagal inisialisasi Google Sheets: ${error.message}`);
   }
 }
