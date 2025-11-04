@@ -266,12 +266,12 @@ export default function BerlanggananPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Manajemen Berlangganan</h2>
           <p className="text-gray-300">Cari Peserta</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap md:justify-end">
           <Button onClick={handleSyncStatus} className="bg-amber-600 hover:bg-amber-700">Sinkronkan Status</Button>
           <ExportButton type="payments" label="Export ke Sheets" />
         </div>

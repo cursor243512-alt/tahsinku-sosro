@@ -242,13 +242,13 @@ export default function PengajarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Manajemen Pengajar</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Manajemen Pengajar</h2>
           <p className="text-gray-300">Kelola data pengajar dan kelas yang diajar</p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2 flex-wrap md:justify-end">
           <ExportButton type="instructors" />
           <Dialog open={isTeacherDialogOpen} onOpenChange={setIsTeacherDialogOpen}>
             <DialogTrigger asChild>
@@ -466,8 +466,8 @@ export default function PengajarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Teachers Table */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-x-auto">
+      {/* Teachers Table (Desktop) */}
+      <div className="hidden md:block bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-x-auto">
         <Table className="min-w-[800px]">
           <TableHeader>
             <TableRow className="border-white/20 hover:bg-white/5">

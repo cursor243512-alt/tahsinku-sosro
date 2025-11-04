@@ -216,13 +216,13 @@ export default function PesertaPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Manajemen Peserta</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Manajemen Peserta</h2>
           <p className="text-gray-300">Kelola data peserta tahsin</p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2 flex-wrap md:justify-end">
           <ExportButton type="participants" />
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -362,8 +362,7 @@ export default function PesertaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Table */}
-      <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-x-auto">
+      <div className="hidden md:block bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 overflow-x-auto">
         <Table className="min-w-[800px]">
           <TableHeader>
             <TableRow className="border-white/20 hover:bg-white/5">
@@ -429,6 +428,52 @@ export default function PesertaPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          <div className="text-center text-gray-400 py-8">Memuat data...</div>
+        ) : participants.length === 0 ? (
+          <div className="text-center text-gray-400 py-8">Belum ada data peserta</div>
+        ) : (
+          participants.map((participant) => (
+            <div key={participant.id} className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-3">
+              <div className="text-white font-semibold break-words">{participant.name}</div>
+              <div className="text-gray-300 text-sm mt-2 space-y-1">
+                <div className="flex justify-between"><span>Alamat</span><span className="ml-2 break-words text-right">{participant.address || '-'}</span></div>
+                <div className="flex justify-between"><span>WhatsApp</span><span className="ml-2 text-right">{participant.whatsapp || '-'}</span></div>
+                <div className="flex justify-between"><span>Jenis Kelamin</span><span className="ml-2">{participant.gender || '-'}</span></div>
+                <div className="flex justify-between"><span>Pekerjaan</span><span className="ml-2 break-words text-right">{participant.job || '-'}</span></div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
+                  onClick={() => openEnrollDialog(participant)}
+                >
+                  <UserPlus className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
+                  onClick={() => handleEdit(participant)}
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-500 text-red-500 hover:bg-red-500/10"
+                  onClick={() => handleDelete(participant.id)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}

@@ -106,17 +106,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
         const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-        const ctl = new AbortController()
-        const id = setTimeout(() => ctl.abort(), 20000)
-        const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', apikey: key },
-          body: JSON.stringify({ email, password }),
-          mode: 'cors',
-          cache: 'no-store',
-          signal: ctl.signal,
-        })
-        clearTimeout(id)
+        const timeoutMs = 20000
+        const timeoutP = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Login timeout. Periksa koneksi internet Anda.')), timeoutMs))
+        const r = (await Promise.race([
+          fetch(`${url}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: key, Authorization: `Bearer ${key}` },
+            body: JSON.stringify({ email, password }),
+            mode: 'cors',
+            cache: 'no-store',
+          }),
+          timeoutP,
+        ])) as Response
         if (!r.ok) {
           let msg = 'Login gagal'
           try { const j = await r.json(); msg = j?.error_description || j?.msg || msg } catch {}

@@ -11,11 +11,23 @@ export async function GET() {
   const supabaseUrlValid = !!url && /^https?:\/\/.+\.supabase\.co\/?$/.test(url)
   const projectRef = url ? url.replace(/^https?:\/\//, '').split('.')[0] : null
 
+  const sheetsJson = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON || ''
+  const sheetsJsonExists = sheetsJson.trim().length > 0
+  const sheetsPath = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH || null
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || null
+
   return NextResponse.json({
     supabaseUrl: url,
     supabaseUrlValid,
     projectRef,
     anonKey,
+    sheets: {
+      credsJson: { exists: sheetsJsonExists, length: sheetsJsonExists ? sheetsJson.length : 0 },
+      credsPathVar: { exists: !!sheetsPath, value: sheetsPath },
+      spreadsheetId: spreadsheetId
+        ? { exists: true, length: spreadsheetId.length, prefix: spreadsheetId.slice(0, 4), suffix: spreadsheetId.slice(-4) }
+        : { exists: false, length: 0 },
+    },
     now: new Date().toISOString(),
   })
 }
