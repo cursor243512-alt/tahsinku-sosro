@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { FileSpreadsheet, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { fetchJson } from '@/lib/http';
 
 interface ExportButtonProps {
   type: 'participants' | 'instructors' | 'attendance' | 'payments';
@@ -31,19 +32,14 @@ export function ExportButton({
         throw new Error('Anda harus login terlebih dahulu');
       }
 
-      const response = await fetch(`/api/export/${type}`, {
+      const data = await fetchJson<{ success: boolean; message?: string }>(`/api/export/${type}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Export gagal');
-      }
+        timeoutMs: 20000,
+        retries: 1,
+      })
 
       setMessage({
         type: 'success',

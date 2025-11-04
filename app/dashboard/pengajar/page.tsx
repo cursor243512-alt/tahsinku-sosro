@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +12,15 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Pencil, Trash2, Plus, GraduationCap } from 'lucide-react'
 import { loadClient } from '@/lib/dynamic'
+import { 
+  useTeachers,
+  useCreateTeacher,
+  useUpdateTeacher,
+  useDeleteTeacher,
+  useClasses,
+  useCreateClass,
+  useDeleteClass,
+} from '@/lib/hooks/use-data'
 
 const ExportButton = loadClient(() => import('@/components/export-button').then(m => m.ExportButton as any))
 
@@ -39,13 +47,18 @@ type Class = {
 const DAYS_OPTIONS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
 
 export default function PengajarPage() {
-  const [teachers, setTeachers] = useState<Teacher[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: teachers = [], isLoading: loading } = useTeachers()
   const [isTeacherDialogOpen, setIsTeacherDialogOpen] = useState(false)
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false)
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null)
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
-  const [teacherClasses, setTeacherClasses] = useState<Class[]>([])
+  const { data: teacherClasses = [] } = useClasses(selectedTeacher?.id || '')
+
+  const createTeacher = useCreateTeacher()
+  const updateTeacher = useUpdateTeacher()
+  const deleteTeacher = useDeleteTeacher()
+  const createClass = useCreateClass()
+  const deleteClassMutation = useDeleteClass()
 
   const [teacherFormData, setTeacherFormData] = useState({
     name: '',
@@ -63,67 +76,23 @@ export default function PengajarPage() {
     time: '',
   })
 
-  useEffect(() => {
-    fetchTeachers()
-  }, [])
-
-  const fetchTeachers = async () => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('teachers')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setTeachers(data || [])
-    } catch (error) {
-      console.error('Error fetching teachers:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchTeacherClasses = async (teacherId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('teacher_id', teacherId)
-        .order('type')
-
-      if (error) throw error
-      setTeacherClasses(data || [])
-    } catch (error) {
-      console.error('Error fetching classes:', error)
-    }
-  }
+  // Data teachers & classes sekarang dikelola oleh TanStack Query hooks di atas
 
   const handleTeacherSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     try {
       if (editingTeacher) {
-        const { error } = await supabase
-          .from('teachers')
-          .update(teacherFormData)
-          .eq('id', editingTeacher.id)
-
-        if (error) throw error
+        await updateTeacher.mutateAsync({ id: editingTeacher.id, data: teacherFormData })
         alert('Data pengajar berhasil diupdate!')
       } else {
-        const { error } = await supabase
-          .from('teachers')
-          .insert([teacherFormData])
-
-        if (error) throw error
+        await createTeacher.mutateAsync(teacherFormData)
         alert('Pengajar baru berhasil ditambahkan!')
       }
 
       setIsTeacherDialogOpen(false)
       setEditingTeacher(null)
       setTeacherFormData({ name: '', phone: '', gender: '', address: '', notes: '' })
-      await fetchTeachers()
     } catch (error: any) {
       console.error('Error saving teacher:', error)
       alert('Gagal menyimpan data: ' + error.message)
@@ -134,14 +103,8 @@ export default function PengajarPage() {
     if (!confirm('Apakah Anda yakin ingin menghapus pengajar ini? Semua kelas yang terkait akan ikut terhapus.')) return
 
     try {
-      const { error } = await supabase
-        .from('teachers')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
+      await deleteTeacher.mutateAsync(id)
       alert('Pengajar berhasil dihapus!')
-      await fetchTeachers()
     } catch (error: any) {
       console.error('Error deleting teacher:', error)
       alert('Gagal menghapus pengajar: ' + error.message)
@@ -162,7 +125,6 @@ export default function PengajarPage() {
 
   const openClassDialog = async (teacher: Teacher) => {
     setSelectedTeacher(teacher)
-    await fetchTeacherClasses(teacher.id)
     setClassFormData({
       type: 'privat',
       name: '',
@@ -187,14 +149,10 @@ export default function PengajarPage() {
     }
 
     try {
-      const { error } = await supabase
-        .from('classes')
-        .insert([{
-          ...classFormData,
-          teacher_id: selectedTeacher.id,
-        }])
-
-      if (error) throw error
+      await createClass.mutateAsync({
+        ...classFormData,
+        teacher_id: selectedTeacher.id,
+      })
 
       alert('Kelas berhasil ditambahkan!')
       setClassFormData({
@@ -204,7 +162,6 @@ export default function PengajarPage() {
         days: [],
         time: '',
       })
-      await fetchTeacherClasses(selectedTeacher.id)
     } catch (error: any) {
       console.error('Error adding class:', error)
       alert('Gagal menambahkan kelas: ' + error.message)
@@ -215,16 +172,8 @@ export default function PengajarPage() {
     if (!confirm('Apakah Anda yakin ingin menghapus kelas ini?')) return
 
     try {
-      const { error } = await supabase
-        .from('classes')
-        .delete()
-        .eq('id', classId)
-
-      if (error) throw error
+      await deleteClassMutation.mutateAsync(classId)
       alert('Kelas berhasil dihapus!')
-      if (selectedTeacher) {
-        await fetchTeacherClasses(selectedTeacher.id)
-      }
     } catch (error: any) {
       console.error('Error deleting class:', error)
       alert('Gagal menghapus kelas: ' + error.message)
