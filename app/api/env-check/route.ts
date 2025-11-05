@@ -15,6 +15,8 @@ export async function GET() {
   const sheetsJsonExists = sheetsJson.trim().length > 0
   const sheetsB64 = process.env.GOOGLE_SHEETS_CREDENTIALS_B64 || ''
   const sheetsB64Exists = sheetsB64.trim().length > 0
+  const sheetsClientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || ''
+  const sheetsPrivateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY || ''
   const sheetsPath = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH || null
   const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || null
 
@@ -26,6 +28,10 @@ export async function GET() {
     sheets: {
       credsJson: { exists: sheetsJsonExists, length: sheetsJsonExists ? sheetsJson.length : 0 },
       credsB64: { exists: sheetsB64Exists, length: sheetsB64Exists ? sheetsB64.length : 0 },
+      credsPair: {
+        clientEmail: { exists: !!sheetsClientEmail },
+        privateKey: { exists: sheetsPrivateKey.trim().length > 0, length: sheetsPrivateKey ? sheetsPrivateKey.length : 0 },
+      },
       credsPathVar: { exists: !!sheetsPath, value: sheetsPath },
       spreadsheetId: spreadsheetId
         ? { exists: true, length: spreadsheetId.length, prefix: spreadsheetId.slice(0, 4), suffix: spreadsheetId.slice(-4) }

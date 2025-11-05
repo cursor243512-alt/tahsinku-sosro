@@ -77,12 +77,23 @@ function getSheetsClient() {
     const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS_JSON;
     const credentialsB64 = process.env.GOOGLE_SHEETS_CREDENTIALS_B64;
     const credentialsPathVar = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH;
+    const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL;
+    const privateKeyRaw = process.env.GOOGLE_SHEETS_PRIVATE_KEY;
+    const projectId = process.env.GOOGLE_SHEETS_PROJECT_ID;
 
     if (credentialsJson && credentialsJson.trim().length > 0) {
       credentials = JSON.parse(credentialsJson);
     } else if (credentialsB64 && credentialsB64.trim().length > 0) {
       const decoded = Buffer.from(credentialsB64, 'base64').toString('utf8')
       credentials = JSON.parse(decoded)
+    } else if (clientEmail && privateKeyRaw && clientEmail.trim().length > 0 && privateKeyRaw.trim().length > 0) {
+      const privateKey = privateKeyRaw.replace(/\\n/g, '\n')
+      credentials = {
+        type: 'service_account',
+        client_email: clientEmail,
+        private_key: privateKey,
+        project_id: projectId || undefined,
+      }
     } else if (credentialsPathVar && credentialsPathVar.trim().length > 0) {
       const resolvedPath = join(process.cwd(), credentialsPathVar);
       credentials = JSON.parse(readFileSync(resolvedPath, 'utf-8'));
@@ -104,7 +115,7 @@ function getSheetsClient() {
 
     // Better error messages
     if (error.message === 'MISSING_SHEETS_ENV') {
-      throw new Error('Konfigurasi Google Sheets belum lengkap. Set salah satu: GOOGLE_SHEETS_CREDENTIALS_JSON (disarankan), GOOGLE_SHEETS_CREDENTIALS_B64 (Base64 dari file JSON), atau GOOGLE_SHEETS_CREDENTIALS_PATH (path file).');
+      throw new Error('Konfigurasi Google Sheets belum lengkap. Set salah satu: GOOGLE_SHEETS_CLIENT_EMAIL + GOOGLE_SHEETS_PRIVATE_KEY (disarankan), GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEETS_CREDENTIALS_B64, atau GOOGLE_SHEETS_CREDENTIALS_PATH.');
     }
     if (error.code === 'ENOENT') {
       const p = process.env.GOOGLE_SHEETS_CREDENTIALS_PATH || '(tidak diset)';
@@ -113,8 +124,8 @@ function getSheetsClient() {
     if (error.message?.includes('Unexpected end of JSON input') || error.message?.includes('JSON')) {
       throw new Error('Format kredensial tidak valid. Jika pakai GOOGLE_SHEETS_CREDENTIALS_JSON, pastikan JSON valid. Jika pakai GOOGLE_SHEETS_CREDENTIALS_B64, pastikan Base64 dari file JSON yang valid.');
     }
-    if (!process.env.GOOGLE_SHEETS_CREDENTIALS_JSON && !process.env.GOOGLE_SHEETS_CREDENTIALS_B64 && !process.env.GOOGLE_SHEETS_CREDENTIALS_PATH) {
-      throw new Error('Konfigurasi Google Sheets belum lengkap. Set salah satu: GOOGLE_SHEETS_CREDENTIALS_JSON atau GOOGLE_SHEETS_CREDENTIALS_B64 atau GOOGLE_SHEETS_CREDENTIALS_PATH');
+    if (!process.env.GOOGLE_SHEETS_CREDENTIALS_JSON && !process.env.GOOGLE_SHEETS_CREDENTIALS_B64 && !process.env.GOOGLE_SHEETS_CREDENTIALS_PATH && !(process.env.GOOGLE_SHEETS_CLIENT_EMAIL && process.env.GOOGLE_SHEETS_PRIVATE_KEY)) {
+      throw new Error('Konfigurasi Google Sheets belum lengkap. Set salah satu: GOOGLE_SHEETS_CLIENT_EMAIL + GOOGLE_SHEETS_PRIVATE_KEY, GOOGLE_SHEETS_CREDENTIALS_JSON, GOOGLE_SHEETS_CREDENTIALS_B64, atau GOOGLE_SHEETS_CREDENTIALS_PATH');
     }
 
     throw new Error(`Gagal inisialisasi Google Sheets: ${error.message}`);
