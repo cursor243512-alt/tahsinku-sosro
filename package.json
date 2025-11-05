@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:3001": "next dev -p 3001",
-    "build": "next build --no-turbo",
+    "build": "cross-env TURBOPACK=0 next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "cross-env": "^7.0.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
