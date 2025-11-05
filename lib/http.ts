@@ -38,15 +38,16 @@ export async function fetchJson<T = any>(url: string, opts: FetchJsonOptions = {
   let lastErr: any
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      const hdrs = new Headers(headers)
       const init: RequestInit & { timeoutMs?: number } = {
         method,
-        headers: { ...headers },
+        headers: hdrs,
         timeoutMs,
         signal,
       }
       if (body !== undefined) {
         init.body = typeof body === 'string' ? body : JSON.stringify(body)
-        if (!init.headers!['Content-Type']) init.headers!['Content-Type'] = 'application/json'
+        if (!hdrs.has('Content-Type')) hdrs.set('Content-Type', 'application/json')
       }
 
       const res = await fetchWithTimeout(url, init)
